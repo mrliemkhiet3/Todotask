@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { 
   Search, 
@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { useTaskStore } from '../store/taskStore';
+import { supabase } from '../lib/supabase';
 import TaskModal from './TaskModal';
 
 const Header = () => {
@@ -21,33 +22,68 @@ const Header = () => {
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [showTaskModal, setShowTaskModal] = useState(false);
+  const [notifications, setNotifications] = useState<any[]>([]);
   
   const { user, profile, logout } = useAuthStore();
-  const { currentProject } = useTaskStore();
+  const { currentProject, tasks, fetchTasks } = useTaskStore();
 
-  const notifications = [
-    {
-      id: 1,
-      title: 'Task completed',
-      message: 'Design mockups have been completed',
-      time: '5 min ago',
-      unread: true
-    },
-    {
-      id: 2,
-      title: 'New comment',
-      message: 'Sarah commented on your project',
-      time: '1 hour ago',
-      unread: true
-    },
-    {
-      id: 3,
-      title: 'Deadline reminder',
-      message: 'API documentation due tomorrow',
-      time: '2 hours ago',
-      unread: false
+  useEffect(() => {
+    // Fetch notifications from database
+    const fetchNotifications = async () => {
+      if (!user) return;
+      
+      try {
+        // Mock notifications for now - you can implement a notifications table
+        const mockNotifications = [
+          {
+            id: 1,
+            title: 'Task completed',
+            message: 'Design mockups have been completed',
+            time: '5 min ago',
+            unread: true
+          },
+          {
+            id: 2,
+            title: 'New comment',
+            message: 'Sarah commented on your project',
+            time: '1 hour ago',
+            unread: true
+          },
+          {
+            id: 3,
+            title: 'Deadline reminder',
+            message: 'API documentation due tomorrow',
+            time: '2 hours ago',
+            unread: false
+          }
+        ];
+        setNotifications(mockNotifications);
+      } catch (error) {
+        console.error('Error fetching notifications:', error);
+      }
+    };
+
+    fetchNotifications();
+  }, [user]);
+
+  const handleSearch = async (query: string) => {
+    setSearchQuery(query);
+    if (query.trim()) {
+      // Implement search functionality
+      try {
+        const { data, error } = await supabase
+          .from('tasks')
+          .select('*')
+          .ilike('title', `%${query}%`)
+          .limit(10);
+        
+        if (error) throw error;
+        // Handle search results
+      } catch (error) {
+        console.error('Search error:', error);
+      }
     }
-  ];
+  };
 
   return (
     <>
@@ -61,7 +97,7 @@ const Header = () => {
                 type="text"
                 placeholder="Search tasks, projects, or team members..."
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                onChange={(e) => handleSearch(e.target.value)}
                 className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
               />
             </div>
@@ -93,7 +129,9 @@ const Header = () => {
                 className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-all duration-200 relative"
               >
                 <Bell className="w-5 h-5" />
-                <span className="absolute top-0 right-0 w-2 h-2 bg-red-500 rounded-full"></span>
+                {notifications.filter(n => n.unread).length > 0 && (
+                  <span className="absolute top-0 right-0 w-2 h-2 bg-red-500 rounded-full"></span>
+                )}
               </button>
 
               {showNotifications && (

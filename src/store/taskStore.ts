@@ -133,7 +133,10 @@ export const useTaskStore = create<TaskState>()(
         try {
           const { error } = await supabase
             .from('tasks')
-            .update(updates)
+            .update({
+              ...updates,
+              updated_at: new Date().toISOString(),
+            })
             .eq('id', id);
 
           if (error) throw error;
@@ -188,6 +191,7 @@ export const useTaskStore = create<TaskState>()(
                 user:profiles (id, name, avatar_url)
               )
             `)
+            .eq('owner_id', user.user.id)
             .order('created_at', { ascending: false });
 
           if (projectsError) throw projectsError;
@@ -263,7 +267,10 @@ export const useTaskStore = create<TaskState>()(
         try {
           const { error } = await supabase
             .from('projects')
-            .update(updates)
+            .update({
+              ...updates,
+              updated_at: new Date().toISOString(),
+            })
             .eq('id', id);
 
           if (error) throw error;

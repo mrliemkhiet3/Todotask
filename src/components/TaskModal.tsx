@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { X, Calendar, User, Flag, Tag, Plus, Trash2 } from 'lucide-react';
 import { useTaskStore } from '../store/taskStore';
 import { useAuthStore } from '../store/authStore';
+import { supabase } from '../lib/supabase';
 import type { TaskWithDetails } from '../store/taskStore';
 
 interface TaskModalProps {
@@ -30,6 +31,8 @@ const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, task, projectId 
 
   const [tags, setTags] = useState<string[]>([]);
   const [newTag, setNewTag] = useState('');
+  const [subtasks, setSubtasks] = useState<{ title: string; completed: boolean }[]>([]);
+  const [newSubtask, setNewSubtask] = useState('');
 
   useEffect(() => {
     if (task) {
@@ -45,6 +48,7 @@ const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, task, projectId 
         progress: task.progress,
       });
       setTags(task.tags || []);
+      setSubtasks(task.subtasks || []);
     } else {
       setFormData({
         title: '',
@@ -58,6 +62,7 @@ const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, task, projectId 
         progress: 0,
       });
       setTags([]);
+      setSubtasks([]);
     }
   }, [task, projectId]);
 
@@ -68,11 +73,47 @@ const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, task, projectId 
     try {
       if (task) {
         await updateTask(task.id, formData);
+        
+        // Update tags
+        if (tags.length > 0) {
+          await supabase.from('task_tags').delete().eq('task_id', task.id);
+          await supabase.from('task_tags').insert(
+            tags.map(tag => ({ task_id: task.id, tag }))
+          );
+        }
+
+        // Update subtasks
+        if (subtasks.length > 0) {
+          await supabase.from('subtasks').delete().eq('task_id', task.id);
+          await supabase.from('subtasks').insert(
+            subtasks.map(subtask => ({ task_id: task.id, ...subtask }))
+          );
+        }
       } else {
-        await addTask({
-          ...formData,
-          created_by: user.id,
-        });
+        const { data: newTask, error } = await supabase
+          .from('tasks')
+          .insert({
+            ...formData,
+            created_by: user.id,
+          })
+          .select()
+          .single();
+
+        if (error) throw error;
+
+        // Add tags
+        if (tags.length > 0) {
+          await supabase.from('task_tags').insert(
+            tags.map(tag => ({ task_id: newTask.id, tag }))
+          );
+        }
+
+        // Add subtasks
+        if (subtasks.length > 0) {
+          await supabase.from('subtasks').insert(
+            subtasks.map(subtask => ({ task_id: newTask.id, ...subtask }))
+          );
+        }
       }
       onClose();
     } catch (error) {
@@ -97,6 +138,23 @@ const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, task, projectId 
 
   const removeTag = (tagToRemove: string) => {
     setTags(tags.filter(tag => tag !== tagToRemove));
+  };
+
+  const addSubtask = () => {
+    if (newSubtask.trim()) {
+      setSubtasks([...subtasks, { title: newSubtask.trim(), completed: false }]);
+      setNewSubtask('');
+    }
+  };
+
+  const removeSubtask = (index: number) => {
+    setSubtasks(subtasks.filter((_, i) => i !== index));
+  };
+
+  const toggleSubtask = (index: number) => {
+    setSubtasks(subtasks.map((subtask, i) => 
+      i === index ? { ...subtask, completed: !subtask.completed } : subtask
+    ));
   };
 
   if (!isOpen) return null;
@@ -294,6 +352,52 @@ const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, task, projectId 
               <button
                 type="button"
                 onClick={addTag}
+                className="btn-secondary px-3"
+              >
+                <Plus className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+
+          {/* Subtasks */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Subtasks
+            </label>
+            <div className="space-y-2 mb-2">
+              {subtasks.map((subtask, index) => (
+                <div key={index} className="flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    checked={subtask.completed}
+                    onChange={() => toggleSubtask(index)}
+                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <span className={`flex-1 ${subtask.completed ? 'line-through text-gray-500' : ''}`}>
+                    {subtask.title}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => removeSubtask(index)}
+                    className="text-red-500 hover:text-red-700"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              ))}
+            </div>
+            <div className="flex space-x-2">
+              <input
+                type="text"
+                value={newSubtask}
+                onChange={(e) => setNewSubtask(e.target.value)}
+                onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addSubtask())}
+                className="flex-1 input focus-ring"
+                placeholder="Add a subtask"
+              />
+              <button
+                type="button"
+                onClick={addSubtask}
                 className="btn-secondary px-3"
               >
                 <Plus className="w-4 h-4" />
